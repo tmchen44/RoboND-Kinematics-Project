@@ -147,11 +147,11 @@ def test_code(test_case):
 
     # Create individual transformation matrices based on first three angles
     T0_1 = T.subs([(alpha, alpha0), (a, a0), (d, d1), (q, q1)])
-    T0_1 = T0_1.subs(s)
+    T0_1 = T0_1.evalf(subs=s)
     T1_2 = T.subs([(alpha, alpha1), (a, a1), (d, d2), (q, q2)])
-    T1_2 = T1_2.subs(s)
+    T1_2 = T1_2.evalf(subs=s)
     T2_3 = T.subs([(alpha, alpha2), (a, a2), (d, d3), (q, q3)])
-    T2_3 = T2_3.subs(s)
+    T2_3 = T2_3.evalf(subs=s)
 
     T0_2 = T0_1 * T1_2
     T0_3 = T0_2 * T2_3

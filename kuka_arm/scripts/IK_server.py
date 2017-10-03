@@ -17,6 +17,7 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from geometry_msgs.msg import Pose
 from mpmath import *
 from sympy import *
+import matplotlib.pyplot as plt
 
 
 def handle_calculate_IK(req):
@@ -71,23 +72,6 @@ def handle_calculate_IK(req):
         T0_5 = T0_4 * T4_5
         T0_6 = T0_5 * T5_6
         T0_G = T0_6 * T6_G
-        # T3_6 = T3_4 * T4_5 * T5_6
-
-        # Extract rotation matrices from the transformation matrices
-        # R0_1 = T0_1[0:3, 0:3]
-        # R1_2 = T1_2[0:3, 0:3]
-        # R2_3 = T2_3[0:3, 0:3]
-        # R3_4 = T3_4[0:3, 0:3]
-        # R4_5 = T4_5[0:3, 0:3]
-        # R5_6 = T5_6[0:3, 0:3]
-        # R6_G = T6_G[0:3, 0:3]
-        # R0_2 = T0_2[0:3, 0:3]
-        # R0_3 = T0_3[0:3, 0:3]
-        # R0_4 = T0_4[0:3, 0:3]
-        # R0_5 = T0_5[0:3, 0:3]
-        # R0_6 = T0_6[0:3, 0:3]
-        # R0_G = T0_G[0:3, 0:3]
-        # R3_6 = T3_6[0:3, 0:3]
 
         # Elementary rotations about principal axes
         R_x = Matrix([[       1,       0,       0,       0],
@@ -120,6 +104,9 @@ def handle_calculate_IK(req):
 
         # Corrective homogeneous transform
         R_corr = Rc_z * Rc_y
+
+        # Homogeneous transform for given poses
+        R_rpy = (R_z * R_y * R_x * R_corr)
         ###
 
         # Initialize service response
@@ -141,20 +128,21 @@ def handle_calculate_IK(req):
 
             ### My IK code here
 	        # Compensate for rotation discrepancy between DH parameters and Gazebo
-            R_rpy = (R_z * R_y * R_x * R_corr).evalf(subs={r: roll, p: pitch, y: yaw})
+            R_rpy_num = R_rpy.evalf(subs={r: roll, p: pitch, y: yaw})
 
 	        # Calculate joint angles using Geometric IK method
             # Wrist center position
             grip_length = s[d7]
-            wx = px - grip_length * R_rpy[0, 2]
-            wy = py - grip_length * R_rpy[1, 2]
-            wz = pz - grip_length * R_rpy[2, 2]
+            wx = px - grip_length * R_rpy_num[0, 2]
+            wy = py - grip_length * R_rpy_num[1, 2]
+            wz = pz - grip_length * R_rpy_num[2, 2]
 
             # Solve inverse position using law of cosines
-            theta1 = atan2(wy, wx)
             A = sqrt(a3**2 + d4**2)
-            B = sqrt((sqrt(wx**2 + wy**2) - a1)**2 + (wz -d1)**2)
+            B = sqrt((sqrt(wx**2 + wy**2) - a1)**2 + (wz - d1)**2)
             C = a2
+
+            theta1 = atan2(wy, wx)
             theta2 = (pi/2 - acos((B**2+C**2-A**2)/(2*B*C)) -
                       atan2(wz - d1, sqrt(wx**2+wy**2) - a1)).evalf(subs=s)
             theta3 = (pi - acos((A**2+C**2-B**2)/(2*A*C)) -
@@ -164,11 +152,10 @@ def handle_calculate_IK(req):
             s.update({q1: theta1, q2: theta2 - pi/2, q3: theta3})
 
             # Update transformation matrices using first three angles
-            T0_2 = T0_2.evalf(subs=s)
-            T0_3 = T0_3.evalf(subs=s)
+            T0_3_num = T0_3.evalf(subs=s)
 
             # Solve inverse orientation
-            R_rhs = T0_3.T * R_rpy
+            R_rhs = T0_3_num.T * R_rpy_num
             theta4 = atan2(R_rhs[2,2], -R_rhs[0,2])
             theta5 = atan2(sqrt(R_rhs[2,2]**2 + R_rhs[0,2]**2), R_rhs[1,2])
             theta6 = atan2(-R_rhs[1,1], R_rhs[1,0])
@@ -177,14 +164,26 @@ def handle_calculate_IK(req):
             s.update({q4: theta4, q5: theta5, q6: theta6})
 
             # Update total transform with all joint angles
-            T0_G = T0_G.evalf(subs=s)
+            T0_G_num = T0_G.evalf(subs=s)
 
             # Find FK EE error
-            ee_x_e = abs(T0_G[0, 3] - px)
-            ee_y_e = abs(T0_G[1, 3] - py)
-            ee_z_e = abs(T0_G[2, 3] - pz)
+            ee_x_e = abs(T0_G_num[0, 3] - px)
+            ee_y_e = abs(T0_G_num[1, 3] - py)
+            ee_z_e = abs(T0_G_num[2, 3] - pz)
             ee_offset = sqrt(ee_x_e**2 + ee_y_e**2 + ee_z_e**2)
 
+            # Plot error using matplotlib
+            # plt.figure(1)
+            # plt.plot(ee_offset)
+            # plt.xlabel('Pose request')
+            # plt.ylabel('Error (in meters)')
+            # plt.show()
+
+            # Print error amounts
+            print "total offset is: ", ee_offset
+            print "x error is: ", ee_x_e
+            print "y_error is: ", ee_y_e
+            print "z_error is: ", ee_z_e
             ###
 
             # Populate response for the IK request

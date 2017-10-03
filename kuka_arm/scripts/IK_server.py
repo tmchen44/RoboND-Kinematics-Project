@@ -34,6 +34,7 @@ def handle_calculate_IK(req):
         alpha0, alpha1, alpha2, alpha3, alpha4, alpha5, alpha6 = symbols('alpha0:7')
         q, d, a, alpha = symbols('q, d, a, alpha')
         r, p, y = symbols('r, p, y')
+        wc_x, wc_y, wc_z, sym_B = symbols('wc_x, wc_y, wc_z, sym_B')
 
         # Create Modified DH parameters
         s = {alpha0:     0, a0:      0, d1:  0.75,
@@ -73,6 +74,10 @@ def handle_calculate_IK(req):
         T0_6 = T0_5 * T5_6
         T0_G = T0_6 * T6_G
 
+        # Lambda functions for fast numerical evaluation in for loop
+        eval_T0_3 = lambdify((q1, q2, q3), T0_3)
+        eval_T0_G = lambdify((q1, q2, q3, q4, q5, q6), T0_G)
+
         # Elementary rotations about principal axes
         R_x = Matrix([[       1,       0,       0,       0],
                       [       0,  cos(r), -sin(r),       0],
@@ -91,22 +96,38 @@ def handle_calculate_IK(req):
 
         # Corrective rotation matrix
         # Rotate about z-axis 180 degrees
-        Rc_z = Matrix([[ cos(pi), -sin(pi),       0,       0],
-                       [ sin(pi),  cos(pi),       0,       0],
-                       [       0,        0,       1,       0],
-                       [       0,        0,       0,       1]])
+        Rc_z = Matrix([[-1, 0, 0, 0],
+                       [ 0,-1, 0, 0],
+                       [ 0, 0, 1, 0],
+                       [ 0, 0, 0, 1]])
 
         # Rotate about y-axis -90 degrees
-        Rc_y = Matrix([[ cos(-pi/2),       0, sin(-pi/2),       0],
-                       [          0,       1,          0,       0],
-                       [-sin(-pi/2),       0, cos(-pi/2),       0],
-                       [          0,       0,          0,       1]])
+        Rc_y = Matrix([[ 0, 0,-1, 0],
+                       [ 0, 1, 0, 0],
+                       [ 1, 0, 0, 0],
+                       [ 0, 0, 0, 1]])
 
         # Corrective homogeneous transform
         R_corr = Rc_z * Rc_y
 
         # Homogeneous transform for given poses
         R_rpy = (R_z * R_y * R_x * R_corr)
+
+        # Lambda function for fast numerical evaluation in for loop
+        eval_R_rpy = lambdify((r, p, y), R_rpy)
+
+        # Lambda functions and variables for fast numerical evaluation
+        A = math.sqrt(s[a3]**2 + s[d4]**2)
+        C = s[a2]
+        eval_B = lambdify((wc_x, wc_y, wc_z),
+                          sqrt((sqrt(wc_x**2 + wc_y**2) - s[a1])**2 +
+                          (wc_z - s[d1])**2))
+        eval_theta2 = lambdify((wc_x, wc_y, wc_z, sym_B), (pi/2 - acos((sym_B**2 +
+                                C**2 - A**2)/(2*sym_B*C)) -
+                                atan2(wc_z - s[d1], sqrt(wc_x**2+wc_y**2) - s[a1])))
+        eval_theta3 = lambdify(sym_B, (pi - acos((A**2 + C**2 - sym_B**2)/(2*A*C)) -
+                                      (pi/2 - atan2(s[a3], s[d4]))))
+
         ###
 
         # Initialize service response
@@ -116,7 +137,7 @@ def handle_calculate_IK(req):
             joint_trajectory_point = JointTrajectoryPoint()
 
 	        # Extract end-effector position and orientation from request
-	        # px,py,pz = end-effector position
+	        # px, py, pz = end-effector position
 	        # roll, pitch, yaw = end-effector orientation
             px = req.poses[x].position.x
             py = req.poses[x].position.y
@@ -127,8 +148,8 @@ def handle_calculate_IK(req):
                     req.poses[x].orientation.z, req.poses[x].orientation.w])
 
             ### My IK code here
-	        # Compensate for rotation discrepancy between DH parameters and Gazebo
-            R_rpy_num = R_rpy.evalf(subs={r: roll, p: pitch, y: yaw})
+	        # Numerically evaluate homogeneous transform of final position
+            R_rpy_num = eval_R_rpy(roll, pitch, yaw)
 
 	        # Calculate joint angles using Geometric IK method
             # Wrist center position
@@ -138,33 +159,23 @@ def handle_calculate_IK(req):
             wz = pz - grip_length * R_rpy_num[2, 2]
 
             # Solve inverse position using law of cosines
-            A = sqrt(a3**2 + d4**2)
-            B = sqrt((sqrt(wx**2 + wy**2) - a1)**2 + (wz - d1)**2)
-            C = a2
+            B = eval_B(wx, wy, wz)
+            theta1 = math.atan2(wy, wx)
+            theta2 = eval_theta2(wx, wy, wz, B)
+            theta3 = eval_theta3(B)
 
-            theta1 = atan2(wy, wx)
-            theta2 = (pi/2 - acos((B**2+C**2-A**2)/(2*B*C)) -
-                      atan2(wz - d1, sqrt(wx**2+wy**2) - a1)).evalf(subs=s)
-            theta3 = (pi - acos((A**2+C**2-B**2)/(2*A*C)) -
-                      (pi/2 - atan2(a3, d4))).evalf(subs=s)
-
-            # Update dictionary with first 3 calculated theta values
-            s.update({q1: theta1, q2: theta2 - pi/2, q3: theta3})
-
-            # Update transformation matrices using first three angles
-            T0_3_num = T0_3.evalf(subs=s)
+            # Update transformation matrix using first three angles
+            T0_3_num = eval_T0_3(theta1, (theta2 - np.pi/2), theta3)
 
             # Solve inverse orientation
-            R_rhs = T0_3_num.T * R_rpy_num
-            theta4 = atan2(R_rhs[2,2], -R_rhs[0,2])
-            theta5 = atan2(sqrt(R_rhs[2,2]**2 + R_rhs[0,2]**2), R_rhs[1,2])
-            theta6 = atan2(-R_rhs[1,1], R_rhs[1,0])
+            R_rhs = np.matmul(T0_3_num.T, R_rpy_num)
 
-            # Update dictionary with last 3 calculated theta values
-            s.update({q4: theta4, q5: theta5, q6: theta6})
+            theta4 = math.atan2(R_rhs[2,2], -R_rhs[0,2])
+            theta5 = math.atan2(math.sqrt(R_rhs[2,2]**2 + R_rhs[0,2]**2), R_rhs[1,2])
+            theta6 = math.atan2(-R_rhs[1,1], R_rhs[1,0])
 
             # Update total transform with all joint angles
-            T0_G_num = T0_G.evalf(subs=s)
+            T0_G_num = eval_T0_G(theta1, theta2 - np.pi/2, theta3, theta4, theta5, theta6)
 
             # Find FK EE error
             ee_x_e = abs(T0_G_num[0, 3] - px)

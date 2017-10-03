@@ -18,6 +18,8 @@ from geometry_msgs.msg import Pose
 from mpmath import *
 from sympy import *
 import matplotlib.pyplot as plt
+import math
+import numpy as np
 
 
 def handle_calculate_IK(req):

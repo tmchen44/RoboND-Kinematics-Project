@@ -20,6 +20,7 @@ from sympy import *
 import matplotlib.pyplot as plt
 import math
 import numpy as np
+import os
 
 
 def handle_calculate_IK(req):
@@ -133,6 +134,7 @@ def handle_calculate_IK(req):
         ###
 
         # Initialize service response
+        ee_error_list = []
         joint_trajectory_list = []
         for x in xrange(0, len(req.poses)):
             # IK code starts here
@@ -183,33 +185,42 @@ def handle_calculate_IK(req):
             ee_x_e = abs(T0_G_num[0, 3] - px)
             ee_y_e = abs(T0_G_num[1, 3] - py)
             ee_z_e = abs(T0_G_num[2, 3] - pz)
-            ee_offset = sqrt(ee_x_e**2 + ee_y_e**2 + ee_z_e**2)
+            ee_offset = math.sqrt(ee_x_e**2 + ee_y_e**2 + ee_z_e**2)
 
-            # Plot error using matplotlib
-            # plt.figure(1)
-            # plt.plot(ee_offset)
-            # plt.xlabel('Pose request')
-            # plt.ylabel('Error (in meters)')
-            # plt.show()
-
-            # Print error amounts
-            print "total offset is: ", ee_offset
-            print "x error is: ", ee_x_e
-            print "y_error is: ", ee_y_e
-            print "z_error is: ", ee_z_e
             ###
 
             # Populate response for the IK request
             # In the next line replace theta1,theta2...,theta6 by your joint angle variables
     	    joint_trajectory_point.positions = [theta1, theta2, theta3, theta4, theta5, theta6]
     	    joint_trajectory_list.append(joint_trajectory_point)
+            ee_error_list.append(ee_offset)
 
         rospy.loginfo("length of Joint Trajectory List: %s" % len(joint_trajectory_list))
+        plot_ee_error(ee_error_list)
         return CalculateIKResponse(joint_trajectory_list)
 
 
+def plot_ee_error(error_list):
+    # plots error using matplotlib
+    global count
+    plt.figure()
+    plt.plot(error_list)
+    plt.xlabel('Pose request #')
+    plt.ylabel('Total error')
+    fname = "../../misc_images/error_plots/error_curve" + str(count)
+    plt.savefig(fname)
+    plt.close()
+    count += 1
+
 def IK_server():
-    # initialize node and declare calculate_ik service
+    # Variable for naming error plots
+    global count
+    count = 0
+    # Remove old error plots
+    filelist = os.listdir("../../misc_images/error_plots")
+    for f in filelist:
+        os.remove("../../misc_images/error_plots/" + f)
+    # Initialize node and declare calculate_ik service
     rospy.init_node('IK_server')
     s = rospy.Service('calculate_ik', CalculateIK, handle_calculate_IK)
     print "Ready to receive an IK request"

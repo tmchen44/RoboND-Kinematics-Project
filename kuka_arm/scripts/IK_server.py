@@ -70,6 +70,7 @@ def handle_calculate_IK(req):
         T6_G = T.subs([(alpha, alpha6), (a, a6), (d, d7), (q, q7)])
         T6_G = T6_G.subs(s)
 
+        # Create transformation matrices w.r.t. base_link frame
         T0_2 = T0_1 * T1_2
         T0_3 = T0_2 * T2_3
         T0_4 = T0_3 * T3_4
@@ -77,7 +78,7 @@ def handle_calculate_IK(req):
         T0_6 = T0_5 * T5_6
         T0_G = T0_6 * T6_G
 
-        # Lambda functions for fast numerical evaluation in for loop
+        # Lambda functions for fast numerical evaluation in the for loop
         eval_T0_3 = lambdify((q1, q2, q3), T0_3)
         eval_T0_G = lambdify((q1, q2, q3, q4, q5, q6), T0_G)
 
@@ -110,13 +111,13 @@ def handle_calculate_IK(req):
                        [ 1, 0, 0, 0],
                        [ 0, 0, 0, 1]])
 
-        # Corrective homogeneous transform
+        # Combined corrective rotation matrix
         R_corr = Rc_z * Rc_y
 
-        # Homogeneous transform for given poses
+        # Homogeneous transform for given end-effector poses
         R_rpy = (R_z * R_y * R_x * R_corr)
 
-        # Lambda function for fast numerical evaluation in for loop
+        # Lambda function for fast numerical evaluation in the for loop
         eval_R_rpy = lambdify((r, p, y), R_rpy)
 
         # Lambda functions and variables for fast numerical evaluation
@@ -137,7 +138,7 @@ def handle_calculate_IK(req):
         ee_error_list = []
         joint_trajectory_list = []
         for x in xrange(0, len(req.poses)):
-            # IK code starts here
+            # IK code
             joint_trajectory_point = JointTrajectoryPoint()
 
 	        # Extract end-effector position and orientation from request
@@ -152,7 +153,7 @@ def handle_calculate_IK(req):
                     req.poses[x].orientation.z, req.poses[x].orientation.w])
 
             ### My IK code here
-	        # Numerically evaluate homogeneous transform of final position
+	        # Numerically evaluate rotation matrix of end-effector orientation
             R_rpy_num = eval_R_rpy(roll, pitch, yaw)
 
 	        # Calculate joint angles using Geometric IK method
@@ -162,26 +163,26 @@ def handle_calculate_IK(req):
             wy = py - grip_length * R_rpy_num[1, 2]
             wz = pz - grip_length * R_rpy_num[2, 2]
 
-            # Solve inverse position using law of cosines
+            # Solve numerical inverse position using law of cosines
             B = eval_B(wx, wy, wz)
             theta1 = math.atan2(wy, wx)
             theta2 = eval_theta2(wx, wy, wz, B)
             theta3 = eval_theta3(B)
 
-            # Update transformation matrix using first three angles
+            # Update numerical transformation matrix using first three angles
             T0_3_num = eval_T0_3(theta1, (theta2 - np.pi/2), theta3)
 
-            # Solve inverse orientation
+            # Solve numerical inverse orientation
             R_rhs = np.matmul(T0_3_num.T, R_rpy_num)
 
             theta4 = math.atan2(R_rhs[2,2], -R_rhs[0,2])
             theta5 = math.atan2(math.sqrt(R_rhs[2,2]**2 + R_rhs[0,2]**2), R_rhs[1,2])
             theta6 = math.atan2(-R_rhs[1,1], R_rhs[1,0])
 
-            # Update total transform with all joint angles
+            # Update numerical total transform with all joint angles
             T0_G_num = eval_T0_G(theta1, theta2 - np.pi/2, theta3, theta4, theta5, theta6)
 
-            # Find FK EE error
+            # Find EE error using FK
             ee_x_e = abs(T0_G_num[0, 3] - px)
             ee_y_e = abs(T0_G_num[1, 3] - py)
             ee_z_e = abs(T0_G_num[2, 3] - pz)
@@ -196,7 +197,7 @@ def handle_calculate_IK(req):
             ee_error_list.append(ee_offset)
 
         rospy.loginfo("length of Joint Trajectory List: %s" % len(joint_trajectory_list))
-        plot_ee_error(ee_error_list)
+        plot_ee_error(ee_error_list) # Call error plotting function
         return CalculateIKResponse(joint_trajectory_list)
 
 
@@ -205,7 +206,7 @@ def plot_ee_error(error_list):
     global count
     plt.figure()
     plt.plot(error_list)
-    plt.xlabel('Pose request #')
+    plt.xlabel('Requested Pose #')
     plt.ylabel('Total error')
     fname = "../../misc_images/error_plots/error_curve" + str(count)
     plt.savefig(fname)

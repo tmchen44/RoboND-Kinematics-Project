@@ -218,6 +218,8 @@ def IK_server():
     global count
     count = 0
     # Remove old error plots
+    # Note: the next three lines were based on a StackOverflow answer to
+    # the question, "Deleting all files in a directory with Python".
     filelist = os.listdir("../../misc_images/error_plots")
     for f in filelist:
         os.remove("../../misc_images/error_plots/" + f)

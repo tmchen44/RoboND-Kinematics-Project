@@ -33,16 +33,15 @@ You're reading it!
 #### 1. Run the forward_kinematics demo and evaluate the kr210.urdf.xacro file to perform kinematic analysis of Kuka KR210 robot and derive its DH parameters.
 
 To derive the DH parameters:
-1. I start with drawing the robotic arm in the configuration where all joint angles are equal to zero. See **Figure 1** below for details.
-2. I start drawing in the Z axes where the joints are, followed by the X axes. These axes with the origin points are shown in red.
-3. I calculate the DH parameters using the given URDF file. The joint axes defined in the URDF file are different from the joint axes defined here, so I used the diagram shown in the lesson to help determine how the joint origins in the URDF file differed from the joint axes shown here. The parameters are calculated accordingly. See the table below or the bottom of **Figure 1** for the DH parameter table.
-
+1. I start by drawing the robotic arm in the configuration where all joint angles are equal to zero. See **Figure 1** below for details.
+2. I start drawing in the Z axes where the joints are, followed by the X axes. These axes with their corresponding origin points are shown in red.
+3. I calculate the DH parameters using the given URDF file. Since the joint axes defined in the URDF file are different from the joint axes defined here, I used the diagram shown in the lesson to help determine how to relate the joint origins in the URDF file to the joint axes shown here. The parameters are calculated accordingly. See the bottom of **Figure 1** for the DH parameter table.
 
 **Figure 1 - Robot Arm Drawing with DH Parameter Table**
 
 ![alt text][image1]
 
-#### 2. Using the DH parameter table you derived earlier, create individual transformation matrices about each joint. In addition, also generate a generalized homogeneous transform between base_link and gripper_link using only end-effector(gripper) pose.
+#### 2. Using the DH parameter table you derived earlier, create individual transformation matrices about each joint. In addition, also generate a generalized homogeneous transform between base_link and gripper_link using only end-effector (gripper) pose.
 
 Please see below for the individual transformation matrices about each joint, as well as the homogeneous transform between base_link and gripper_link. The derivation of each matrix is also explained.
 
@@ -52,9 +51,9 @@ Page 1
 Page 2
 ![alt text][image3]
 
-#### 3. Decouple Inverse Kinematics problem into Inverse Position Kinematics and Inverse Orientation Kinematics; doing so, derive the equations to calculate all individual joint angles.
+#### 3. Decouple the Inverse Kinematics problem into Inverse Position Kinematics and Inverse Orientation Kinematics; doing so, derive the equations to calculate all individual joint angles.
 
-Please see below for the derivation of equations for each joint angle. Page 1 shows the Inverse Position problem, and page 2 shows the Inverse Orientation problem.
+Please see below for the derivation of equations for each joint angle. Page 1 shows Inverse Position Kinematics, and page 2 shows Inverse Orientation Kinematics.
 
 Page 1
 ![alt text][image4]
